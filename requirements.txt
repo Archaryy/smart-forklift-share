@@ -1,0 +1,8 @@
+# Versions taken from the working .venv on the dev PC (Python 3.11).
+# PyTorch is installed separately by setup_client.bat so it matches the
+# client's GPU/driver (see https://pytorch.org/get-started/locally/).
+ultralytics==8.4.215
+opencv-python==5.0.0.93
+numpy==2.4.6
+lap==0.5.14
+pyyaml==6.0.3

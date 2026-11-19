@@ -1,0 +1,17 @@
+# Real install: copy to config.yaml.  Camera URLs hold passwords, so put them in
+# MACHINE environment variables (admin PowerShell):  setx /M CAM1_URL "rtsp://user:pass@192.168.1.64:554/Streaming/Channels/101"
+engine:
+  model: runs/v2_with_truck-2/weights/best.pt
+  imgsz: 960
+  max_fps: 10          # analysed frames per second PER camera
+  min_age: 3           # frames a detection must persist
+  close_seconds: 0.5   # person in bay this long -> output HIGH / gate closed state
+  open_seconds: 3.0    # bay clear this long -> output LOW
+  http_port: 8765      # local viewer feed (127.0.0.1 only)
+alarm:
+  pc_beep: true
+cameras:
+  - {id: dock1, name: "Dock 1", url_env: CAM1_URL, gpu: 0, rear: bottom, relay: {enabled: true, output: 1}}
+  - {id: dock2, name: "Dock 2", url_env: CAM2_URL, gpu: 0, rear: bottom, relay: {enabled: true, output: 1}}
+  - {id: dock3, name: "Dock 3", url_env: CAM3_URL, gpu: 1, rear: bottom, relay: {enabled: true, output: 1}}
+  - {id: dock4, name: "Dock 4", url_env: CAM4_URL, gpu: 1, rear: bottom, relay: {enabled: true, output: 1}}

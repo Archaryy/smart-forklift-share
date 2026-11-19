@@ -1,0 +1,41 @@
+# environment
+.venv/
+__pycache__/
+*.pyc
+
+# datasets and frames (large, regenerate or store elsewhere)
+combined_dataset/
+original_dataset/
+new_dataset/
+new-dataset/
+ultralytics_forklift/
+site_frames/
+hard_negatives/
+hard_frames/
+site_backup_old99/
+videos/
+*.zip
+*.ndjson
+ultra_scan_cache.json
+
+# training output, weights (the one deployed model lives in models/)
+runs/
+*.pt
+!models/best.pt
+
+# build output
+build/
+dist/
+release/
+*.spec
+
+# local / secret / generated
+config.yaml
+logs/
+*.log
+*.bak
+*.bak[0-9]
+*.mp4
+camera_snapshot.jpg
+loading_bay_zone.json
+bay_config.json

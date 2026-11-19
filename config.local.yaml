@@ -1,0 +1,17 @@
+# Local test: 4 looping video files act as cameras, no relay hardware needed.
+# (If this PC has only one GPU, every camera uses gpu 0 automatically.)
+engine:
+  model: runs/v2_with_truck-2/weights/best.pt
+  imgsz: 960
+  max_fps: 10
+  min_age: 3
+  close_seconds: 0.5
+  open_seconds: 3.0
+  http_port: 8765
+alarm:
+  pc_beep: false
+cameras:
+  - {id: dock1, name: "Test 1", source: videos/test_site3.MOV, gpu: 0, rear: bottom}
+  - {id: dock2, name: "Test 2", source: videos/test_site4.MOV, gpu: 0, rear: bottom}
+  - {id: dock3, name: "Test 3", source: videos/test_site5.MOV, gpu: 1, rear: bottom}
+  - {id: dock4, name: "Test 4", source: videos/test_site6.MOV, gpu: 1, rear: bottom}
