@@ -4,7 +4,7 @@ engine:
   model: runs/v2_with_truck-2/weights/best.pt
   imgsz: 960
   max_fps: 5
-  half: true           # FP16 inference (faster on NVIDIA GPUs)
+  quantize: 16         # FP16 inference (faster on NVIDIA GPUs); 32 = full precision
   min_age: 3
   close_seconds: 0.5
   open_seconds: 3.0

@@ -22,7 +22,8 @@ from urllib.parse import urlparse, unquote
 import contextlib
 
 import cv2
-import torch          # import heavy libraries once, in the main thread,
+import numpy as np
+import torch         # import heavy libraries once, in the main thread,
 import torchvision    # BEFORE worker threads start (concurrent first import crashed)
 import yaml
 from ultralytics import YOLO
@@ -91,6 +92,17 @@ class MultiAlarm:
             time.sleep(0.15)
 
 
+def load_zones(path):
+    """Fixed bay polygons from a JSON file made by tools/draw_bay.py: [[ [x,y],... ], ...] in 0..1 image
+    coordinates (a single polygon is accepted too). Returns [] if no file is configured."""
+    if not path:
+        return []
+    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    if data and isinstance(data[0][0], (int, float)):
+        data = [data]
+    return [[(float(x), float(y)) for x, y in poly] for poly in data]
+
+
 def cam_url(cam):
     return cam.get("url") or os.environ.get(cam.get("url_env", ""), "") or None
 
@@ -105,7 +117,10 @@ class CameraWorker(threading.Thread):
         self.max_fps = float(eng.get("max_fps", 10))
         self.min_age = int(eng.get("min_age", 3))
         self.model_path = eng["model"]
-        self.half = bool(eng.get("half", True))      # FP16: faster on NVIDIA GPUs
+        # precision: engine.quantize (16 = FP16, faster on NVIDIA GPUs; 32 = FP32). Old `half: true/false` still works.
+        self.quantize = eng.get("quantize", 16 if eng.get("half", True) else 32)
+        self.draw_boxes = bool(cam.get("draw_boxes", eng.get("draw_boxes", False)))   # truck bay zones + forklift boxes
+        self.fixed_zones = load_zones(cam.get("zone_file"))   # if set: this fixed bay replaces the truck-based bay
         self.beep = bool(cam.get("beep", True))
         self.beep_hz = int(cam.get("beep_hz", 800))
         self.thr = {tv.CLASS_FORKLIFT: float(cam.get("conf_forklift", tv.CONF_FORKLIFT)),
@@ -194,7 +209,7 @@ class CameraWorker(threading.Thread):
             with (INIT_LOCK if idx == 1 else contextlib.nullcontext()):
                 res = model.track(source=frame, conf=min(self.thr.values()), imgsz=self.imgsz,
                                   tracker=tv.TRACKER, persist=True, device=dev,
-                                  half=(self.half and dev != "cpu"), verbose=False)
+                                  quantize=(self.quantize if dev != "cpu" else 32), verbose=False)
             boxes = res[0].boxes
             seen = set()
             for b in boxes:
@@ -222,7 +237,10 @@ class CameraWorker(threading.Thread):
 
             units, free_persons = tv.associate(f_boxes, p_boxes)
             self.bays.update([(tid, tb) for tb, _c, tid in t_boxes], idx)
-            zones = self.bays.polys(self.bay_cfg, w, h)
+            if self.fixed_zones:
+                zones = [np.array([[x * w, y * h] for x, y in p], np.int32) for p in self.fixed_zones]
+            else:
+                zones = self.bays.polys(self.bay_cfg, w, h)
             gate_state, gate_msg = self.gate.update(free_persons, zones)
             if gate_state != self.state:
                 log.info("[%s] -> %s (persons=%d)", self.id, gate_state, len(free_persons))
@@ -237,10 +255,14 @@ class CameraWorker(threading.Thread):
             if now < self.want_until:                      # only draw when a viewer is watching
                 sc = min(960 / w, 540 / h, 1.0)
                 disp = cv2.resize(frame, (int(w * sc), int(h * sc)), interpolation=cv2.INTER_AREA) if sc < 1 else frame.copy()
-                for z in zones:
-                    tv.draw_zone_on_display(disp, z, gate_state, sc)
-                for i, u in enumerate(units):
-                    tv.draw_forklift_unit(disp, u, f_confs[i], f_ids[i], sc)
+                if self.draw_boxes:
+                    for tb, tc, _tid in t_boxes:
+                        tv.draw_truck(disp, tb, tc, sc)
+                    for i, u in enumerate(units):
+                        tv.draw_forklift_unit(disp, u, f_confs[i], f_ids[i], sc)
+                if self.draw_boxes or self.fixed_zones:        # a fixed bay is always shown
+                    for z in zones:
+                        tv.draw_zone_on_display(disp, z, gate_state, sc)
                 for pb in free_persons:
                     tv.draw_free_person(disp, pb, sc, p_conf.get(tuple(pb)))
                 tv.draw_hud(disp, units, free_persons, conf, self.label)

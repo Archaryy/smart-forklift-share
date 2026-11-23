@@ -20,6 +20,7 @@ are ignored (only feet on the floor area count), and forklift operators are pair
 | `test_video.py` | Single-camera/video test app with window (draw zone, auto bay, seek, relay, alarm) |
 | `gate_engine.py` | Headless multi-camera engine (1 thread + model per camera, GPUs shared) |
 | `gate_app.py` | **One program**: engine + built-in multi-camera viewer (grid, click to maximise, alarm banner, event log). `build_app.bat` -> `GateMonitor.exe` |
+| `test_single.py` | Small single-input alarm test (file / RTSP / webcam): same logic as the engine, beep + red alarm window, optional camera relay (`--relay`), headless mode (`--no-window --seconds 60`) |
 | `viewer.py` | Desktop window: tiled live view of all cameras from a separately running engine |
 | `detect_http_camera.py` | Same detection from camera HTTP snapshots (slow, ~5 FPS; testing only) |
 | `gate_relay.py` | Alternative fail-safe relay module (permit-to-open polarity); not wired into the engine |

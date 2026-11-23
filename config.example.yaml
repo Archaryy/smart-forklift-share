@@ -4,7 +4,7 @@
 engine:
   model: runs/v2_with_truck-2/weights/best.pt
   imgsz: 960
-  half: true           # FP16 inference
+  quantize: 16         # FP16 inference (faster on NVIDIA GPUs); 32 = full precision
   max_fps: 10          # analysed frames per second PER camera
   min_age: 3           # frames a detection must persist
   close_seconds: 0.5   # person in bay this long -> output HIGH / gate closed state
