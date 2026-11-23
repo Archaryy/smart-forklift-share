@@ -19,7 +19,11 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from urllib.parse import urlparse, unquote
 
+import contextlib
+
 import cv2
+import torch          # import heavy libraries once, in the main thread,
+import torchvision    # BEFORE worker threads start (concurrent first import crashed)
 import yaml
 from ultralytics import YOLO
 
@@ -27,6 +31,7 @@ import test_video as tv
 
 log = logging.getLogger("engine")
 WORKERS = {}
+INIT_LOCK = threading.Lock()      # model load + first (warm-up) inference run one camera at a time
 
 
 class FileLoopStream:
@@ -56,6 +61,36 @@ class FileLoopStream:
         self.cap.release()
 
 
+class MultiAlarm:
+    """One beeper thread. Every camera with beep enabled has its own tone, so you
+    can hear WHICH stream has a person in its bay."""
+
+    def __init__(self, enabled=True):
+        self.enabled, self.active = enabled, {}
+        try:
+            import winsound
+            self._beep = winsound.Beep
+        except ImportError:
+            self._beep = lambda f, d: (print("\a", end="", flush=True), time.sleep(d / 1000))
+        threading.Thread(target=self._loop, daemon=True).start()
+
+    def set(self, cid, hz, on):
+        if on and self.enabled:
+            self.active[cid] = hz
+        else:
+            self.active.pop(cid, None)
+
+    def _loop(self):
+        while True:
+            tones = list(self.active.values())
+            if not tones:
+                time.sleep(0.05)
+                continue
+            for hz in tones:
+                self._beep(int(hz), 250)
+            time.sleep(0.15)
+
+
 def cam_url(cam):
     return cam.get("url") or os.environ.get(cam.get("url_env", ""), "") or None
 
@@ -70,6 +105,9 @@ class CameraWorker(threading.Thread):
         self.max_fps = float(eng.get("max_fps", 10))
         self.min_age = int(eng.get("min_age", 3))
         self.model_path = eng["model"]
+        self.half = bool(eng.get("half", True))      # FP16: faster on NVIDIA GPUs
+        self.beep = bool(cam.get("beep", True))
+        self.beep_hz = int(cam.get("beep_hz", 800))
         self.thr = {tv.CLASS_FORKLIFT: float(cam.get("conf_forklift", tv.CONF_FORKLIFT)),
                     tv.CLASS_PERSON: float(cam.get("conf_person", tv.CONF_PERSON)),
                     tv.CLASS_TRUCK: float(cam.get("conf_truck", tv.CONF_TRUCK))}
@@ -84,9 +122,11 @@ class CameraWorker(threading.Thread):
         self.stop = threading.Event()
         self.state, self.persons, self.fps, self.updated = "STARTING", 0, 0.0, 0.0
         self.jpeg, self.want_until = (None, 0.0), 0.0
+        self.frame = (None, 0.0)       # latest annotated BGR frame + timestamp (for the in-process viewer)
         self.relay = None
         rc = cam.get("relay") or {}
-        url = cam_url(cam)
+        # the alarm output can live on another camera/device: relay.url_env names its URL variable
+        url = (os.environ.get(rc["url_env"], "") or None) if rc.get("url_env") else cam_url(cam)
         if rc.get("enabled") and url and url.lower().startswith("rtsp"):
             u = urlparse(url)
             self.relay = tv.CameraRelay(u.hostname, unquote(u.username or ""), unquote(u.password or ""),
@@ -111,22 +151,23 @@ class CameraWorker(threading.Thread):
         return tv.LiveStream(url, url.isdigit())
 
     def run(self):
-        try:
-            self._loop()
-        except Exception:
-            log.exception("[%s] worker crashed", self.id)
-            self.state = "ERROR"
-            if self.relay:
-                self.relay.set(True)
-        finally:
-            if self.relay:
-                self.relay.close()
+        while not self.stop.is_set():
+            try:
+                self._loop()
+            except Exception:
+                log.exception("[%s] worker crashed - restarting in 5 s", self.id)
+                self.state = "ERROR"
+                if self.relay:
+                    self.relay.set(True)
+                self.stop.wait(5)
+        if self.relay:
+            self.relay.close()
 
     def _loop(self):
-        import torch
         dev = self.gpu if (torch.cuda.is_available() and self.gpu < torch.cuda.device_count()) \
             else (0 if torch.cuda.is_available() else "cpu")
-        model = YOLO(self.model_path)
+        with INIT_LOCK:
+            model = YOLO(self.model_path)
         log.info("[%s] started on device %s", self.id, dev)
         stream, track_age, idx, last_ok, t_prev = None, {}, 0, time.time(), time.time()
         conf = self.thr[tv.CLASS_PERSON]
@@ -150,8 +191,10 @@ class CameraWorker(threading.Thread):
             idx += 1
             h, w = frame.shape[:2]
 
-            res = model.track(source=frame, conf=min(self.thr.values()), imgsz=self.imgsz,
-                              tracker=tv.TRACKER, persist=True, device=dev, verbose=False)
+            with (INIT_LOCK if idx == 1 else contextlib.nullcontext()):
+                res = model.track(source=frame, conf=min(self.thr.values()), imgsz=self.imgsz,
+                                  tracker=tv.TRACKER, persist=True, device=dev,
+                                  half=(self.half and dev != "cpu"), verbose=False)
             boxes = res[0].boxes
             seen = set()
             for b in boxes:
@@ -202,6 +245,7 @@ class CameraWorker(threading.Thread):
                     tv.draw_free_person(disp, pb, sc, p_conf.get(tuple(pb)))
                 tv.draw_hud(disp, units, free_persons, conf, self.label)
                 tv.draw_gate_banner(disp, gate_state, gate_msg, conf)
+                self.frame = (disp, now)
                 okj, buf = cv2.imencode(".jpg", disp, [cv2.IMWRITE_JPEG_QUALITY, 70])
                 if okj:
                     self.jpeg = (buf.tobytes(), now)
@@ -253,11 +297,10 @@ class Handler(BaseHTTPRequestHandler):
             self.send_error(404)
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--config", default="config.yaml")
-    args = ap.parse_args()
-    cfg_path = Path(args.config).resolve()
+def start(config_path, serve_http=True):
+    """Load the config and start every camera worker. Returns the MultiAlarm.
+    Used by main() (headless) and by gate_app.py (built-in viewer, serve_http=False)."""
+    cfg_path = Path(config_path).resolve()
     os.chdir(cfg_path.parent)                         # relative paths in the config are relative to it
     cfg = yaml.safe_load(cfg_path.read_text(encoding="utf-8"))
 
@@ -269,15 +312,36 @@ def main():
     eng.setdefault("model", tv.MODEL_PATH)
     port = int(eng.get("http_port", 8765))
 
+    for i, c in enumerate(cfg["cameras"]):            # must precede CameraWorker(), which reads beep_hz
+        c.setdefault("beep_hz", 800 + 300 * i)
     for c in cfg["cameras"]:
         WORKERS[str(c["id"])] = CameraWorker(c, eng)
-    alarm = tv.Alarm(enabled=(cfg.get("alarm") or {}).get("pc_beep", True))
+    alarm = MultiAlarm(enabled=(cfg.get("alarm") or {}).get("pc_beep", True))
 
-    srv = ThreadingHTTPServer(("127.0.0.1", port), Handler)   # local only
-    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    if serve_http:
+        srv = ThreadingHTTPServer(("127.0.0.1", port), Handler)   # local only
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
     for w in WORKERS.values():
         w.start()
-    log.info("engine started: %d cameras, viewer feed on 127.0.0.1:%d", len(WORKERS), port)
+    log.info("engine started: %d cameras%s", len(WORKERS),
+             f", viewer feed on 127.0.0.1:{port}" if serve_http else " (built-in viewer)")
+    return alarm
+
+
+def stop_all(alarm):
+    log.info("stopping")
+    for w in WORKERS.values():
+        alarm.set(w.id, 0, False)
+        w.stop.set()
+    for w in WORKERS.values():
+        w.join(timeout=5)
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--config", default="config.yaml")
+    args = ap.parse_args()
+    alarm = start(args.config)
 
     stop = threading.Event()
     for name in ("SIGINT", "SIGTERM", "SIGBREAK"):
@@ -285,15 +349,11 @@ def main():
         if sig is not None:
             signal.signal(sig, lambda *_: stop.set())
     while not stop.is_set():
-        alarm.set(any(w.state == "CLOSED" for w in WORKERS.values()))
+        for w in WORKERS.values():
+            alarm.set(w.id, w.beep_hz, w.beep and w.state == "CLOSED")
         stop.wait(0.2)
 
-    log.info("stopping")
-    alarm.set(False)
-    for w in WORKERS.values():
-        w.stop.set()
-    for w in WORKERS.values():
-        w.join(timeout=5)
+    stop_all(alarm)
 
 
 if __name__ == "__main__":

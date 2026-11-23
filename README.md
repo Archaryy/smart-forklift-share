@@ -19,7 +19,8 @@ are ignored (only feet on the floor area count), and forklift operators are pair
 |---|---|
 | `test_video.py` | Single-camera/video test app with window (draw zone, auto bay, seek, relay, alarm) |
 | `gate_engine.py` | Headless multi-camera engine (1 thread + model per camera, GPUs shared) |
-| `viewer.py` | Desktop window: tiled live view of all cameras from the engine |
+| `gate_app.py` | **One program**: engine + built-in multi-camera viewer (grid, click to maximise, alarm banner, event log). `build_app.bat` -> `GateMonitor.exe` |
+| `viewer.py` | Desktop window: tiled live view of all cameras from a separately running engine |
 | `detect_http_camera.py` | Same detection from camera HTTP snapshots (slow, ~5 FPS; testing only) |
 | `gate_relay.py` | Alternative fail-safe relay module (permit-to-open polarity); not wired into the engine |
 | `config.example.yaml` / `config.local.yaml` | Real 4-camera template / local test with video files |
@@ -37,6 +38,13 @@ Local test with video files as fake cameras (two terminals):
 python gate_engine.py --config config.local.yaml
 python viewer.py
 ```
+Or the all-in-one monitor (no second terminal; reads `config.yaml` next to it unless `--config` is given):
+```
+python gate_app.py --config config.local.yaml
+```
+Mouse: click a camera to maximise / click again or right-click for all. Keys: `1-9` camera, `0`/`Esc` all, `S` sidebar,
+`M` mute beep, `F` fullscreen, `Q` quit. Build the exe with `build_app.bat` -> `dist\GateMonitor\GateMonitor.exe`
+(a folder, not a packed single file: that would unpack GBs of PyTorch/CUDA at every start). Put `config.yaml` and the model beside it.
 Single camera with a window:
 ```
 $env:CAM_URL = "rtsp://USER:PASSWORD@CAMERA_IP:554/Streaming/Channels/102"

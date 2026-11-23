@@ -3,13 +3,14 @@
 engine:
   model: runs/v2_with_truck-2/weights/best.pt
   imgsz: 960
-  max_fps: 10
+  max_fps: 5
+  half: true           # FP16 inference (faster on NVIDIA GPUs)
   min_age: 3
   close_seconds: 0.5
   open_seconds: 3.0
   http_port: 8765
 alarm:
-  pc_beep: false
+  pc_beep: true
 cameras:
   - {id: dock1, name: "Test 1", source: videos/test_site3.MOV, gpu: 0, rear: bottom}
   - {id: dock2, name: "Test 2", source: videos/test_site4.MOV, gpu: 0, rear: bottom}
