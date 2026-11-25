@@ -101,11 +101,36 @@ The hwid changes, so the old lock/model stop working — re-run steps 3–6. If 
 PC dies and they rebuild it, or they ask for more cameras, this is working as intended;
 just reissue.
 
+## If a copy turns up somewhere it shouldn't (watermarking)
+
+Every `lock.key` already carries the client label you gave it in step 4, readable
+without your private key (that's intentional — the lock is signed, not secret). If you
+ever find a copy of the software running somewhere unexpected, grab its `lock.key` and
+run:
+
+```
+.venv\Scripts\python.exe tools\read_lock.py path\to\lock.key
+```
+
+It prints the client name, hwid, camera cap and issue date straight off the file, so
+you know whose install it came from.
+
+## Harder to reverse engineer: Nuitka instead of PyInstaller
+
+`build_app.bat` ships your code as PyInstaller bytecode, which decompiles easily.
+[build_app_nuitka.bat](build_app_nuitka.bat) is an alternative that compiles it to
+native code instead, making `hwlock.py`'s checks much harder to find and patch out.
+It's slower to build (expect 20–60+ min the first time, versus ~10 for PyInstaller)
+and large ML libraries sometimes need an extra flag or two to compile cleanly — the
+script's own comments walk through that. **I wrote this but haven't run it
+end-to-end in this repo** — try it yourself on a machine you can watch before relying
+on it for a client build. The lock/model workflow afterward (steps 3–7 above) is
+identical either way.
+
 ## What this doesn't stop
 
 A skilled reverse engineer can still find `hwlock.py`'s logic inside the compiled exe
-(it's PyInstaller bytecode, not source, but decompilable) and patch the checks out.
-This stops casual copying — zipping the folder to another PC, or editing `config.yaml`
-to add a 5th camera — not a determined attacker. Compiling the real entry points with
-Nuitka instead of plain PyInstaller would raise that bar further; that's a separate,
-optional step if you ever want it.
+and patch the checks out — Nuitka raises that bar, but doesn't remove it. This stops
+casual copying — zipping the folder to another PC, or editing `config.yaml` to add a
+5th camera — not a determined attacker. [CLIENT_LICENSE_CLAUSE.md](CLIENT_LICENSE_CLAUSE.md)
+has a sample license paragraph for the part the technical lock can't cover.
