@@ -23,6 +23,7 @@ set PY=.venv\Scripts\python.exe
 %PY% -m pip install nuitka || goto :err
 
 %PY% -m nuitka --standalone --windows-console-mode=disable --output-dir=dist_nuitka ^
+  --mingw64 --assume-yes-for-downloads --disable-cache=ccache ^
   --include-module=hwlock --include-module=gate_engine ^
   --include-package=ultralytics --include-package=torchvision --include-package=cryptography ^
   --include-package-data=ultralytics ^
