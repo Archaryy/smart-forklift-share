@@ -335,18 +335,14 @@ def start(config_path, serve_http=True):
                         handlers=[RotatingFileHandler("logs/engine.log", maxBytes=5_000_000, backupCount=5, encoding="utf-8"),
                                   logging.StreamHandler()])
 
-    cap = hwlock.enforce(cfg_path.parent)             # exits the process if lock.key is missing/wrong PC
+    cap = hwlock.enforce(cfg_path.parent)             # raises hwlock.LockError if lock.key is missing/wrong PC
     cfg["cameras"] = cfg["cameras"][:cap]
 
     eng = cfg.get("engine", {})
     eng.setdefault("model", tv.MODEL_PATH)
     model_path = Path(eng["model"])
     if model_path.suffix.lower() == ".enc":           # encrypted weights: decrypt once, into a temp file
-        try:
-            plain = hwlock.decrypt_model(model_path, hwlock.get_hwid())
-        except hwlock.LockError as e:
-            print(f"Startup check failed: {e}", file=sys.stderr)
-            sys.exit(1)
+        plain = hwlock.decrypt_model(model_path, hwlock.get_hwid())   # raises hwlock.LockError on the wrong PC
         tmp = tempfile.NamedTemporaryFile(suffix=".pt", delete=False)
         tmp.write(plain)
         tmp.close()
@@ -387,7 +383,11 @@ def main():
     if args.print_hwid:
         print(hwlock.get_hwid())
         return
-    alarm = start(args.config)
+    try:
+        alarm = start(args.config)
+    except hwlock.LockError as e:
+        print(f"Startup check failed: {e}", file=sys.stderr)
+        sys.exit(1)
 
     stop = threading.Event()
     for name in ("SIGINT", "SIGTERM", "SIGBREAK"):

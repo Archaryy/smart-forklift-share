@@ -259,8 +259,12 @@ def main():
             boot["alarm"] = ge.start(cfg, serve_http=False)
             boot["ge"] = ge
         except Exception as e:
+            import hwlock
             import traceback
-            boot["err"] = f"{type(e).__name__}: {e}"
+            if isinstance(e, hwlock.LockError):
+                boot["err"] = f"Startup check failed: {e}"
+            else:
+                boot["err"] = f"{type(e).__name__}: {e}"
             traceback.print_exc()
     threading.Thread(target=boot_engine, daemon=True, name="boot").start()
 

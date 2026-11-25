@@ -15,7 +15,6 @@ import base64
 import hashlib
 import json
 import subprocess
-import sys
 from pathlib import Path
 
 from cryptography.exceptions import InvalidSignature
@@ -26,11 +25,11 @@ from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
 # ---- replace both of these after running tools/keygen.py -----------------------------
 # Public half of the signing keypair (safe to ship / commit - it can only verify, not sign).
-PUBLIC_KEY_HEX = "0000000000000000000000000000000000000000000000000000000000000000"
+PUBLIC_KEY_HEX = "76912a724a7bc7a44f35836d205a9d84491abd8ecced159a411e7adc763b23af"
 # Secret used (together with each PC's hardware id) to derive the model's encryption key.
 # Keep this the same forever once you start shipping - changing it breaks every lock
 # and encrypted model already issued. Never changes per client; the hwid does that.
-APP_SECRET_HEX = "0000000000000000000000000000000000000000000000000000000000000000"
+APP_SECRET_HEX = "65615bd9e6a6d9e6eaa428c98b8b9828537c6253325bae2fb06b659a584c26f6"
 # ----------------------------------------------------------------------------------------
 
 HARD_CAMERA_CAP = 4   # absolute ceiling, regardless of what a lock file claims
@@ -98,13 +97,12 @@ def load_lock(path):
 
 def enforce(app_dir):
     """Call once at startup, before loading any camera or model. Returns the camera count
-    to apply. Exits the process (no traceback, no 'license' wording) if the lock is
-    missing or doesn't match this PC."""
-    try:
-        data = load_lock(Path(app_dir) / "lock.key")
-    except LockError as e:
-        print(f"Startup check failed: {e}", file=sys.stderr)
-        sys.exit(1)
+    to apply. Raises LockError if the lock is missing or doesn't match this PC - the
+    caller decides how to surface that (sys.exit for the headless CLI, a message box for
+    the GUI app). Deliberately does NOT exit here itself: this runs inside a background
+    thread in gate_app.py, and sys.exit() there would just kill that thread silently,
+    leaving the window stuck on its loading splash forever instead of showing an error."""
+    data = load_lock(Path(app_dir) / "lock.key")
     cap = int(data.get("max_cameras", HARD_CAMERA_CAP))
     return max(1, min(cap, HARD_CAMERA_CAP))
 
