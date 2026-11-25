@@ -6,3 +6,4 @@ opencv-python==5.0.0.93
 numpy==2.4.6
 lap==0.5.14
 pyyaml==6.0.3
+cryptography==50.0.2

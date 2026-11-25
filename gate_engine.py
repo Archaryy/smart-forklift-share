@@ -8,10 +8,13 @@ http://127.0.0.1:<port>/cam/<id>.mjpg for viewer.py; /status gives JSON.
 Reuses the detection / bay / gate code from test_video.py.
 """
 import argparse
+import atexit
 import json
 import logging
 import os
 import signal
+import sys
+import tempfile
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -28,6 +31,7 @@ import torchvision    # BEFORE worker threads start (concurrent first import cra
 import yaml
 from ultralytics import YOLO
 
+import hwlock
 import test_video as tv
 
 log = logging.getLogger("engine")
@@ -330,8 +334,24 @@ def start(config_path, serve_http=True):
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s",
                         handlers=[RotatingFileHandler("logs/engine.log", maxBytes=5_000_000, backupCount=5, encoding="utf-8"),
                                   logging.StreamHandler()])
+
+    cap = hwlock.enforce(cfg_path.parent)             # exits the process if lock.key is missing/wrong PC
+    cfg["cameras"] = cfg["cameras"][:cap]
+
     eng = cfg.get("engine", {})
     eng.setdefault("model", tv.MODEL_PATH)
+    model_path = Path(eng["model"])
+    if model_path.suffix.lower() == ".enc":           # encrypted weights: decrypt once, into a temp file
+        try:
+            plain = hwlock.decrypt_model(model_path, hwlock.get_hwid())
+        except hwlock.LockError as e:
+            print(f"Startup check failed: {e}", file=sys.stderr)
+            sys.exit(1)
+        tmp = tempfile.NamedTemporaryFile(suffix=".pt", delete=False)
+        tmp.write(plain)
+        tmp.close()
+        atexit.register(lambda p=tmp.name: Path(p).unlink(missing_ok=True))
+        eng["model"] = tmp.name
     port = int(eng.get("http_port", 8765))
 
     for i, c in enumerate(cfg["cameras"]):            # must precede CameraWorker(), which reads beep_hz
@@ -362,7 +382,11 @@ def stop_all(alarm):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", default="config.yaml")
+    ap.add_argument("--print-hwid", action="store_true", help=argparse.SUPPRESS)
     args = ap.parse_args()
+    if args.print_hwid:
+        print(hwlock.get_hwid())
+        return
     alarm = start(args.config)
 
     stop = threading.Event()

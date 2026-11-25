@@ -9,8 +9,8 @@ set PY=.venv\Scripts\python.exe
 %PY% -m pip install pyinstaller || goto :err
 
 %PY% -m PyInstaller --noconfirm --onedir --noconsole --name GateMonitor ^
-  --collect-all ultralytics --collect-all torchvision --copy-metadata ultralytics ^
-  --hidden-import lap --hidden-import gate_engine gate_app.py || goto :err
+  --collect-all ultralytics --collect-all torchvision --collect-all cryptography --copy-metadata ultralytics ^
+  --hidden-import lap --hidden-import gate_engine --hidden-import hwlock gate_app.py || goto :err
 
 echo.
 echo Built:  dist\GateMonitor\GateMonitor.exe

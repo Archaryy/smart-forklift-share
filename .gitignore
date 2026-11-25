@@ -29,6 +29,11 @@ dist/
 release/
 *.spec
 
+# copy-protection secrets - NEVER commit these, dev PC only
+dev_private_key.pem
+lock.key
+*.enc
+
 # local / secret / generated
 config.yaml
 logs/

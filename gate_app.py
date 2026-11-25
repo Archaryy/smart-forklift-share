@@ -231,7 +231,16 @@ def main():
     ap.add_argument("--config", default=None, help="default: config.yaml next to this program")
     ap.add_argument("--snapshot", default=None, help=argparse.SUPPRESS)        # test aid: save a PNG and exit
     ap.add_argument("--snapshot-after", type=float, default=20.0, help=argparse.SUPPRESS)
+    ap.add_argument("--print-hwid", action="store_true", help=argparse.SUPPRESS)
     args = ap.parse_args()
+    if args.print_hwid:
+        import hwlock
+        hwid = hwlock.get_hwid()
+        if getattr(sys, "frozen", False):
+            ctypes.windll.user32.MessageBoxW(0, hwid, "Machine ID - send this to Wilson", 0x40)
+        else:
+            print(hwid)
+        return 0
     cfg = Path(args.config) if args.config else app_dir() / "config.yaml"
     if not cfg.exists():
         fatal(f"Config file not found:\n{cfg}\n\nCopy config.example.yaml to config.yaml and edit it.")
