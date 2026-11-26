@@ -49,11 +49,21 @@ def _run(cmd):
 
 
 def get_hwid():
-    """Fingerprint for this PC: BIOS/board UUID + first physical disk's serial, hashed down
-    to a short id. Stable across reboots and reinstalls; changes if the client moves the
-    software to different hardware (a new PC, a VM, a different disk)."""
+    """Fingerprint for this PC: BIOS/board UUID + the Windows system disk's serial, hashed
+    down to a short id. Stable across reboots and reinstalls; changes if the client moves the
+    software to different hardware (a new PC, a VM, a different disk).
+
+    Deliberately resolves the disk that actually holds the Windows system drive (via
+    Get-Partition/Get-Disk) rather than "whichever disk WMI lists first" - Win32_DiskDrive's
+    enumeration order is not guaranteed, so on a PC with more than one disk (a second internal
+    drive, or anything plugged in over USB) "first" can silently flip between runs and change
+    the hwid, making a genuine lock reject a genuine match."""
     board = _run("(Get-CimInstance Win32_ComputerSystemProduct).UUID")
-    disk = _run("(Get-CimInstance Win32_DiskDrive | Select-Object -First 1 -ExpandProperty SerialNumber)")
+    disk_cmd = ("$p = Get-Partition | Where-Object { $_.DriveLetter -eq ($env:SystemDrive)[0] }; "
+                "(Get-Disk -Number $p.DiskNumber).SerialNumber")
+    disk = _run(disk_cmd)
+    if not disk.strip():
+        disk = _run("(Get-CimInstance Win32_DiskDrive | Select-Object -First 1 -ExpandProperty SerialNumber)")
     raw = f"{board.strip()}|{disk.strip()}"
     return hashlib.sha256(raw.encode()).hexdigest()[:24]
 

@@ -6,5 +6,5 @@ REM   setx CAM_URL "rtsp://USER:PASSWORD@CAMERA_IP:554/Streaming/Channels/102"
 REM then open a NEW terminal / re-login.
 cd /d "%~dp0"
 call .venv\Scripts\activate
-python test_video.py --camera --model runs\v2_with_truck-2\weights\best.pt
+python test_video.py --camera --model runs\forklift\v4_corrections\weights\best.pt
 pause

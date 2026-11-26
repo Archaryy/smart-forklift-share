@@ -2,7 +2,7 @@
 # Real install: copy to config.yaml.  Camera URLs hold passwords, so put them in
 # MACHINE environment variables (admin PowerShell):  setx /M CAM1_URL "rtsp://user:pass@192.168.1.64:554/Streaming/Channels/101"
 engine:
-  model: runs/v2_with_truck-2/weights/best.pt
+  model: runs/forklift/v4_corrections/weights/best.pt
   imgsz: 960
   quantize: 16         # FP16 inference (faster on NVIDIA GPUs); 32 = full precision
   max_fps: 10          # analysed frames per second PER camera

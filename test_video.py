@@ -37,7 +37,7 @@ from collections import defaultdict
 # CONFIGURATION
 # ─────────────────────────────────────────────
 
-MODEL_PATH  = "runs/v2_with_truck-2/weights/best.pt"
+MODEL_PATH  = "runs/forklift/v4_corrections/weights/best.pt"
 VIDEO_PATH  = "videos/test_site3.mov"
 
 CLASS_FORKLIFT = 0

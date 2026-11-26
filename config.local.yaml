@@ -1,7 +1,7 @@
 # Local test: 4 looping video files act as cameras, no relay hardware needed.
 # (If this PC has only one GPU, every camera uses gpu 0 automatically.)
 engine:
-  model: runs/v2_with_truck-2/weights/best.pt
+  model: runs/forklift/v4_corrections/weights/best.pt
   imgsz: 960
   max_fps: 5
   quantize: 16         # FP16 inference (faster on NVIDIA GPUs); 32 = full precision

@@ -32,7 +32,7 @@ GENERIC_N     = 2500   # random generic train images (Kaggle + Ultralytics)
 VAL_N         = 400    # random val images (generic; site frames are all in train)
 # Site videos to keep OUT of training and use as a site-domain val set.
 # e.g. ["test_site2"] - empty = train on every site frame.
-HOLDOUT_SITE  = []
+HOLDOUT_SITE  = ["site_hold_"]   # 25 own-annotated frames kept out of training (valid+test of the zip)
 
 EPOCHS        = 25
 IMGSZ         = 960
